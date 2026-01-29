@@ -1,0 +1,47 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: people_sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Your_strong_Password123!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - people_sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"Your_strong_Password123!\" -Q \"SELECT 1\" -C || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - people_net
+
+  mysql:
+    image: mysql:8.0
+    container_name: people_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "rootpwd"
+      MYSQL_DATABASE: "people_read"
+      MYSQL_USER: "app"
+      MYSQL_PASSWORD: "apppwd"
+    ports:
+      - "3306:3306"
+    volumes:
+      - people_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -prootpwd --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - people_net
+
+volumes:
+  people_sqlserver_data:
+  people_mysql_data:
+
+networks:
+  people_net:
+    driver: bridge
