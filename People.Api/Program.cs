@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using People.Application.Abstractions;
 using People.Application.Commands.People.CreatePerson;
+using People.Application.Commands.People.DeletePerson;
+using People.Application.Commands.People.UpdatePerson;
 using People.Application.Queries.People.GetPersonById;
 using People.Infrastructure.ReadDb;
 using People.Infrastructure.ReadDb.Repositories;
@@ -38,6 +40,8 @@ builder.Services.AddScoped<IOutboxWriter, EfOutboxWriter>();
 // ---- Handlers ----
 builder.Services.AddScoped<CreatePersonHandler>();
 builder.Services.AddScoped<GetPersonByIdHandler>();
+builder.Services.AddScoped<DeletePersonHandler>();
+builder.Services.AddScoped<UpdatePersonHandler>();
 
 var app = builder.Build();
 

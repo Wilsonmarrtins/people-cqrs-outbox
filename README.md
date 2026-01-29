@@ -1,71 +1,78 @@
-
 # people-cqrs-outbox
 
-Exemplo de aplicação .NET demonstrando **CQRS (Command Query Responsibility Segregation)** com **bancos de dados separados para escrita e leitura**, utilizando **Entity Framework Core**, **Outbox Pattern transacional**, **SQL Server**, **MySQL**, **Docker Compose** e **processos em segundo plano (Worker)** para garantir **consistência eventual**.
+Exemplo de aplicação .NET demonstrando **CQRS (Command Query Responsibility Segregation)** com **bancos de dados separados para escrita e leitura**, utilizando **Entity Framework Core**, **Outbox Pattern transacional**, **SQL Server**, **MySQL**, **Docker Compose** e **Worker Service** para garantir **consistência eventual**.
 
 ---
 
 ## 🎯 Objetivo do Projeto
 
-Este projeto tem como objetivo demonstrar, de forma prática e organizada, uma arquitetura **enterprise-ready**, abordando problemas reais de sistemas distribuídos, como:
+Demonstrar uma arquitetura moderna, robusta e escalável, aplicável a cenários reais de sistemas distribuídos, abordando:
 
-- Separação de responsabilidades entre escrita e leitura
+- Separação clara entre leitura e escrita
 - Consistência eventual
-- Confiabilidade na publicação de eventos
+- Publicação confiável de eventos
+- Processamento assíncrono
 - Escalabilidade e desacoplamento
-- Integração entre múltiplos bancos de dados
 
 ---
 
 ## 🧱 Arquitetura Geral
 
-A aplicação segue os seguintes princípios:
+A aplicação segue:
 
-- **CQS (Command Query Separation)**  
-- **CQRS (Command Query Responsibility Segregation)**  
+- **CQS (Command Query Separation)**
+- **CQRS (Command Query Responsibility Segregation)**
 - **Outbox Pattern**
 - **Clean Architecture**
-- **Single Responsibility Principle**
+- **DDD Tático (Entities, Commands, Handlers)**
 
 ### Visão macro
 
 ```
-API (ASP.NET Core)
- ├── Commands (Write)
- │    └── SQL Server (WriteDb)
- │         ├── People
- │         └── OutboxMessages
- │
- ├── Queries (Read)
- │    └── MySQL (ReadDb)
- │         └── People_Read
- │
- └── Worker (Background Service)
-      └── Lê Outbox → Atualiza ReadDb
+┌──────────────┐
+│   API HTTP   │
+│ ASP.NET Core │
+└──────┬───────┘
+       │ Commands (Create / Update / Delete)
+       ▼
+┌────────────────────┐
+│ Write DB           │
+│ SQL Server         │
+│ - people           │
+│ - outbox_messages  │
+└────────┬───────────┘
+         │ Outbox
+         ▼
+┌────────────────────┐
+│ Worker Service     │
+│ People.Worker      │
+└────────┬───────────┘
+         │ Projeção
+         ▼
+┌────────────────────┐
+│ Read DB            │
+│ MySQL              │
+│ - people_read      │
+└────────────────────┘
 ```
 
 ---
 
 ## ✍️ CQS vs CQRS
 
-### CQS – Command Query Separation
+### CQS
+- **Commands**: alteram estado (Create, Update, Delete)
+- **Queries**: apenas leitura
+- Um método nunca faz os dois
 
-- **Commands**: executam ações que alteram estado (INSERT, UPDATE, DELETE)
-- **Queries**: apenas consultam dados (SELECT)
-- Um método **nunca faz as duas coisas ao mesmo tempo**
+### CQRS
+- Bancos separados
+- Modelos independentes
+- Escala e performance melhores
 
-### CQRS – Command Query Responsibility Segregation
-
-CQRS leva o CQS além:
-
-- Bancos de dados **separados**
-- Modelos de dados **otimizados para cada uso**
-- Escalabilidade independente
-- Maior clareza arquitetural
-
-👉 Neste projeto:
-- **WriteDb (SQL Server)** → Commands
-- **ReadDb (MySQL)** → Queries
+Neste projeto:
+- **SQL Server** → Escrita
+- **MySQL** → Leitura
 
 ---
 
@@ -73,15 +80,11 @@ CQRS leva o CQS além:
 
 ### 🟦 Write Database (SQL Server)
 
-Responsável por **todas as escritas** do sistema.
+Banco: `PeopleWrite`
 
-**Banco:** `PeopleWrite`
-
-**Tabelas:**
-
-#### `people`
+#### Tabela `people`
 | Campo | Tipo |
-|------|------|
+|-----|-----|
 | Id | uniqueidentifier |
 | Name | nvarchar |
 | Age | int |
@@ -90,30 +93,26 @@ Responsável por **todas as escritas** do sistema.
 | Cpf | nvarchar |
 | CreatedAtUtc | datetime |
 
-#### `outbox_messages`
+#### Tabela `outbox_messages`
 | Campo | Tipo |
-|------|------|
+|-----|-----|
 | Id | uniqueidentifier |
 | Type | nvarchar |
 | PayloadJson | nvarchar(max) |
 | OccurredAtUtc | datetime |
 | ProcessedAtUtc | datetime (nullable) |
 
-> Este banco utiliza **EF Core Migrations**.
+> Usa **EF Core Migrations**
 
 ---
 
 ### 🟩 Read Database (MySQL)
 
-Responsável **somente por leitura**, otimizado para consultas.
+Banco: `PeopleRead`
 
-**Banco:** `PeopleRead`
-
-**Tabela:**
-
-#### `people_read`
+#### Tabela `people_read`
 | Campo | Tipo |
-|------|------|
+|-----|-----|
 | id | char(36) |
 | name | varchar |
 | age | int |
@@ -122,115 +121,130 @@ Responsável **somente por leitura**, otimizado para consultas.
 | cpf | varchar |
 | created_at_utc | datetime |
 
-> ❗ Não utiliza migrations.  
-> O modelo é mantido via **eventos processados pelo Worker**.
+> Não utiliza migrations  
+> É mantido exclusivamente pelo Worker
 
 ---
 
 ## 📦 Outbox Pattern
 
-### Por que usar Outbox?
+### Por que Outbox?
 
 Sem Outbox:
-- ❌ Dados podem ser salvos sem evento
-- ❌ Eventos podem ser publicados sem dados
-- ❌ Inconsistência entre sistemas
+- Dados gravados sem evento
+- Eventos publicados sem dados
+- Falhas difíceis de recuperar
 
 Com Outbox:
-- ✅ Escrita e evento na **mesma transação**
-- ✅ Garantia de entrega
-- ✅ Resiliência a falhas
+- Escrita + evento na mesma transação
+- Garantia de entrega
+- Retry automático
 
-### Como funciona neste projeto
+### Fluxo
 
-1. Command grava `Person`
-2. Command grava `OutboxMessage`
-3. Tudo é confirmado na **mesma transação**
-4. Worker processa eventos pendentes
+1. Command grava entidade
+2. Command grava Outbox
+3. Commit único
+4. Worker processa
 
 ---
 
-## 🔁 Worker (Em breve)
+## 🔁 Worker Service (People.Worker)
 
-O **People.Worker** será responsável por:
+Responsável por:
 
-- Ler mensagens não processadas da `outbox_messages`
-- Desserializar o evento
-- Atualizar o **ReadDb (MySQL)**
-- Marcar a mensagem como processada
+- Ler eventos não processados da Outbox
+- Desserializar Payload JSON
+- Atualizar o ReadDb (MySQL)
+- Marcar eventos como processados
 
-### Responsabilidades do Worker
+### Eventos suportados
+- `PersonCreated`
+- `PersonUpdated`
+- `PersonDeleted`
 
-- Retry com backoff
-- Idempotência
-- Processamento seguro
+### Garantias
+- Processamento idempotente
+- Retry automático
 - Consistência eventual
+
+---
+
+## 🌐 Endpoints da API
+
+### Criar pessoa
+`POST /api/people`
+
+### Atualizar pessoa
+`PUT /api/people/{id}`
+
+### Remover pessoa
+`DELETE /api/people/{id}`
+
+> A API **nunca acessa o ReadDb**
 
 ---
 
 ## 🐳 Docker Compose
 
-### Subir os bancos de dados
-
+### Subir os bancos
 ```bash
 docker compose up -d
 ```
 
 Serviços:
-- `people_sqlserver` → SQL Server (WriteDb)
-- `people_mysql` → MySQL (ReadDb)
-
-### Ver containers
-
-```bash
-docker compose ps
-```
+- SQL Server (WriteDb)
+- MySQL (ReadDb)
 
 ---
 
 ## 🧪 Migrations (WriteDb)
 
 ### Criar migration
-
 ```bash
-dotnet ef migrations add InitialWrite   --project People.Infrastructure   --startup-project People.Api   --context WriteDbContext   --output-dir WriteDb/Migrations
+dotnet ef migrations add InitialWrite \
+  --project People.Infrastructure \
+  --startup-project People.Api \
+  --context WriteDbContext
 ```
 
 ### Aplicar migration
-
 ```bash
-dotnet ef database update   --project People.Infrastructure   --startup-project People.Api   --context WriteDbContext
+dotnet ef database update \
+  --project People.Infrastructure \
+  --startup-project People.Api \
+  --context WriteDbContext
 ```
 
 ---
 
-## 🚀 Tecnologias Utilizadas
+## 🚀 Tecnologias
 
 - .NET 9
 - ASP.NET Core
-- Entity Framework Core
+- EF Core
 - SQL Server
 - MySQL
-- Docker / Docker Compose
+- Docker
 - CQRS / CQS
 - Outbox Pattern
-- Clean Architecture
+- Worker Service
 
 ---
 
 ## 📌 Considerações Finais
 
-Este projeto não é um CRUD simples.  
-Ele demonstra **decisões arquiteturais reais**, utilizadas em sistemas distribuídos modernos, com foco em:
+Este projeto demonstra uma arquitetura **enterprise-ready**, focada em:
 
-- Robustez
-- Escalabilidade
 - Clareza
-- Evolução futura
+- Robustez
+- Evolução
+- Observabilidade
+- Escalabilidade
 
-Ideal para estudo avançado, portfólio profissional e base para sistemas enterprise.
+Ideal como **portfólio profissional** ou base para sistemas distribuídos reais.
 
 ---
 
 👤 **Autor:** Wilson Martins  
-📅 **Projeto educacional / arquitetural**
+📅 Projeto educacional e arquitetural

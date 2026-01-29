@@ -1,14 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-People.Worker-953d3230-a1ce-4b87-b9bb-f446bac30812</UserSecretsId>
+    <UserSecretsId>dotnet-People.Worker-d0eb2029-bbbe-478a-a6c3-8e75655750f3</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
   </ItemGroup>
 

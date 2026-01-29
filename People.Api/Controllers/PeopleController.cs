@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using People.Application.Commands.People.CreatePerson;
+using People.Application.Commands.People.DeletePerson;
+using People.Application.Commands.People.UpdatePerson;
 using People.Application.Queries.People.GetPersonById;
 
 namespace People.Api.Controllers;
@@ -20,5 +22,20 @@ public sealed class PeopleController : ControllerBase
     {
         var result = await handler.Handle(new GetPersonByIdQuery(id), ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, UpdatePersonCommand command, UpdatePersonHandler handler, CancellationToken ct)
+    {
+        var result = await handler.Handle(command with { Id = id }, ct);
+        return result.NotFound ? NotFound() : NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id,DeletePersonHandler handler,CancellationToken ct)
+    {
+        var result = await handler.Handle(new DeletePersonCommand(id), ct);
+        return result.NotFound ? NotFound() : NoContent();
     }
 }

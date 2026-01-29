@@ -9,4 +9,7 @@ public interface IPersonWriteRepository
     Task AddAsync(Person person, CancellationToken ct);
     Task SaveChangesAsync(CancellationToken ct);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct);
+
+    Task<Person?> GetByIdAsync(Guid id, CancellationToken ct);
+    void Remove(Person person);
 }

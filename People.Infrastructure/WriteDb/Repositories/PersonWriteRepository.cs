@@ -22,4 +22,10 @@ public sealed class PersonWriteRepository : IPersonWriteRepository
 
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct)
            => _db.Database.BeginTransactionAsync(ct);
+
+    public Task<Person?> GetByIdAsync(Guid id, CancellationToken ct)
+    => _db.People.FirstOrDefaultAsync(x => x.Id == id, ct);
+
+    public void Remove(Person person)
+        => _db.People.Remove(person);
 }
